@@ -1,0 +1,12 @@
+\begin{tabular}{lccccccc}
+\hline
+\textbf{Model} & \textbf{MSE} & $\mathbf{R^2}$ & $\bar{\boldsymbol{\rho}}$ & \textbf{MSE$_0$} & \textbf{MSE$_1$} & \textbf{KL} & \textbf{AU} \\ \hline
+AE, $z=2$ & 0.2377 & 0.771 & 0.874 & 0.2317 & 0.3418 & -- & -- \\
+AE, $z=4$ & 0.0573 & 0.945 & 0.972 & 0.0570 & 0.0635 & -- & -- \\
+AE, $z=8$$^\star$ & \textbf{0.0045} & \textbf{0.996} & \textbf{0.998} & 0.0044 & 0.0057 & -- & -- \\
+\hline
+VAE, $z=8$, $\beta=0.5$ & 0.0342 & 0.967 & 0.985 & 0.0331 & 0.0531 & 6.62 & 8/8 \\
+VAE, $z=8$, $\beta=1$ & 0.0755 & 0.927 & 0.968 & 0.0733 & 0.1122 & 4.55 & 7/8 \\
+VAE, $z=8$, $\beta=4$$^\star$ & 0.5106 & 0.509 & 0.726 & 0.5118 & 0.4885 & 1.01 & 4/8 \\
+\hline
+\end{tabular}
