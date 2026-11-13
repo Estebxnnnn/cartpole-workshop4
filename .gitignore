@@ -1,0 +1,19 @@
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.venv/
+venv/
+.DS_Store
+*.log
+# LaTeX build files
+report/*.aux
+report/*.log
+report/*.out
+report/*.pdf
+# LaTeX build files (Workshop 4 report)
+report/**/*.aux
+report/**/*.log
+report/**/*.out
+report/**/*.fls
+report/**/*.fdb_latexmk
+report/**/*.pdf
