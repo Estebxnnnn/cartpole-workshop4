@@ -72,7 +72,7 @@ Install dependencies (see section above).
 Colab already ships numpy, pandas, scikit-learn, matplotlib and seaborn, so no installation is needed:
 
 ```python
-!git clone https://github.com/Tonyaa11/Cartpole.git cartpole-ml
+!git clone https://github.com/Estebxnnnn/cartpole-workshop4.git cartpole-ml
 %cd cartpole-ml
 !python dataset_info.py
 !python src/baselines.py
@@ -279,7 +279,7 @@ python src/analyze_latent.py             # t-SNE / UMAP, silhouette, linear prob
 python src/make_report_w4.py             # numbers + tables for report/workshop4/main.tex
 ```
 
-In Google Colab, open `notebooks/workshop4_colab.ipynb` and run all cells. The last cell downloads `workshop4_results.zip` with the runs, the checkpoints and the report folder. `python src/train_ae.py --epochs 3` is a quick smoke test. `python src/analyze_latent.py --no-umap` skips UMAP if `umap-learn` is not installed.
+In Google Colab, open `notebooks/workshop4_colab.ipynb` from this repository (`Estebxnnnn/cartpole-workshop4`) and run all cells. The last cell downloads `workshop4_results.zip` with the runs, the checkpoints and the report folder. `python src/train_ae.py --epochs 3` is a quick smoke test. `python src/analyze_latent.py --no-umap` skips UMAP if `umap-learn` is not installed.
 
 ### 10.3 Files
 

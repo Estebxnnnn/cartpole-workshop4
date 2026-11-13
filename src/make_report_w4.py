@@ -147,8 +147,19 @@ def main() -> None:
     # training rows / times
     macros["trainRowsAll"] = f"{int(train[train['regime'] == 'all']['train_rows'].iloc[0]):,}"
     macros["trainRowsNormal"] = f"{int(train[train['regime'] == 'normal']['train_rows'].iloc[0]):,}"
+    for bb in sel["beta_grid"]:
+        tag = {0.5: "Half", 1.0: "One", 4.0: "Four"}.get(bb, str(bb).replace(".", ""))
+        macros[f"aucbeta{tag}"] = f3(B[f"{bb:g}"]["anomaly_auc_recon"])
+    vae_all = TrainConfig(model="vae", regime="all", z_dim=z, beta=b).name + " [mse]"
+    macros["vaeAllAUC"] = f3(S[vae_all]["roc_auc"])
+    curves = rec["error_analysis"]["median_mse_vs_steps"]
+    macros["errZeroNormal"] = f"{curves['AE (normal rows only)'][0]:.3f}"
+    macros["errTenNormal"] = f"{curves['AE (normal rows only)'][10]:.3f}"
+    macros["errZeroAll"] = f"{curves['AE (all rows)'][0]:.3f}"
+    macros["errTenAll"] = f"{curves['AE (all rows)'][10]:.3f}"
     for zz in sel["z_grid"]:
         tag = {2: "Two", 4: "Four", 8: "Eight"}.get(zz, str(zz))
+        macros[f"aeRsqz{tag}"] = f3(R[TrainConfig(model="ae", z_dim=zz).name]["r2"])
         macros[f"aeMSEz{tag}"] = f4(R[TrainConfig(model="ae", z_dim=zz).name]["mse"])
         macros[f"aeAUCz{tag}"] = f3(S[TrainConfig(model="ae", regime="normal", z_dim=zz).name]["roc_auc"])
 

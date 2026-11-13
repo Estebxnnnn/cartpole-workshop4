@@ -59,14 +59,16 @@ autoencoders (AE) with latent sizes $z\in\{2,4,8\}$ and variational autoencoders
 with $\beta\in\{0.5,1,4\}$ on the same 16 engineered features and the same episode-level
 split, without using the failure labels. Pre-failure states are treated as anomalies:
 models trained only on safe states score each test state by its reconstruction error.
-The deterministic AE reconstructs the data almost perfectly ($R^2=\aeRsq$ at $z=\zstar$) but
-also reconstructs pre-failure states, reaching only ROC-AUC $=\aeAUC$. The KL-regularised
-VAE is a better detector: the reconstruction-plus-KL score reaches ROC-AUC $=\vaeklAUC$ and
-PR-AUC $=\vaeklPR$, without labels. Supervised models remain clearly superior
-(Gradient Boosting: ROC-AUC $=\gbAUC$, PR-AUC $=\gbPR$). The latent-space analysis explains
-this gap: unsupervised codes organise the data by the dominant physical variables (cart
-position and velocity), whereas a supervised bottleneck collapses onto the single direction
-that matters for failure (balanced silhouette \silSup{} versus \silVAE{} for the VAE).
+Accurate reconstruction does not imply good detection. The AE with $z=8$ reconstructs
+almost perfectly ($R^2=\aeRsqzEight$), yet the selected detectors use the smallest code
+($z=\zstar$) and the strongest regularisation ($\beta=\betastar$). The AE reaches ROC-AUC
+$=\aeAUC$. The VAE reaches \vaeAUC{} with its reconstruction error and \vaeklAUC{} when the KL
+term is added (PR-AUC $=\vaeklPR$), all without labels. Supervised models remain clearly
+superior (Gradient Boosting: ROC-AUC $=\gbAUC$, PR-AUC $=\gbPR$). The latent-space analysis
+explains this gap. Unsupervised codes are organised by the dominant physical variables, and
+failure states lie at the periphery of the latent space rather than along a separable
+direction. A supervised bottleneck, in contrast, aligns with failure risk (balanced
+silhouette \silSup{} versus \silAE{} for the AE and \silVAE{} for the VAE).
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -235,24 +237,29 @@ latent size. (b) VAE reconstruction MSE and (c) validation KL divergence for eac
 
 \subsection{Training Dynamics}
 Fig.~\ref{fig:curves} shows stable training without overfitting: the train and validation
-curves stay close in every run. The AE error falls sharply with the latent size (test MSE \aeMSEzTwo, \aeMSEzFour{} and
-\aeMSEzEight{} for $z=2,4,8$). With $z=8$ the code is only half the input width, yet the
-reconstruction is nearly perfect, because the 16 engineered features are highly redundant. Several of them are deterministic functions of
-the raw state, for example $|\theta|$ and $0.2095-|\theta|$.
+curves stay close in every run. The AE error falls sharply with the latent size (test MSE
+\aeMSEzTwo, \aeMSEzFour{} and \aeMSEzEight{} for $z=2,4,8$). With $z=8$ the code is only
+half the input width, yet the reconstruction is nearly perfect ($R^2=\aeRsqzEight$), because
+the 16 engineered features are highly redundant. Several of them are deterministic functions
+of the raw state, for example $|\theta|$ and $0.2095-|\theta|$. Even so, the validation
+anomaly criterion selects the \emph{smallest} code, $z^\star=\zstar$
+(Table~\ref{tab:sweep}). This first sign that reconstruction accuracy and detection ability
+diverge is examined in Section~\ref{sec:anomaly}.
 
-The VAE curves show the annealing mechanism at work. While $\beta$ is still small, the
-reconstruction error drops quickly. When the KL weight reaches its target, the error rises
-until the model settles on a trade-off whose position depends on $\beta$. For $\beta=4$ the
-KL term falls to \klFour{} nats per sample.
+The VAE curves show the annealing mechanism at work. For $\beta=0.5$ and $\beta=1$ the
+reconstruction error keeps decreasing throughout training. For $\beta=4$ the error rises
+during the warm-up, as the KL weight grows, and settles at a higher level once the weight
+reaches its target. The KL term then stays at \klFour{} nats per sample, compared with
+\klHalf{} nats for $\beta=0.5$.
 
 \subsection{Reconstruction Quality}
-Table~\ref{tab:recon} summarises the test reconstruction. The selected AE
-($z=\zstar$) reaches MSE $=\aeMSE$ and $\bar\rho=\aeCorr$. The selected VAE
-($\beta=\betastar$) is far less accurate (MSE $=\vaeMSE$, $R^2=\vaeRsq$). This is the
-expected rate-distortion trade-off: as $\beta$ grows, the model pays more for each nat of
-information in $\mathbf z$ and keeps only the dominant factors. Only \vaeActive{} of its
-\zstar{} latent dimensions remain active (Fig.~\ref{fig:beta}b), so the posterior has
-partially collapsed. The remaining dimensions encode the variables with the most variance.
+Table~\ref{tab:recon} summarises the test reconstruction. The selected AE ($z=\zstar$)
+reaches MSE $=\aeMSE$ and $\bar\rho=\aeCorr$. The selected VAE ($\beta=\betastar$) is less
+accurate (MSE $=\vaeMSE$, $R^2=\vaeRsq$). This is the expected rate-distortion trade-off: as
+$\beta$ grows, every nat of information in $\mathbf z$ costs more, so the model keeps only the
+dominant factors. Both latent dimensions remain active for every $\beta$
+(Table~\ref{tab:recon}), so there is no posterior collapse. With a two-unit code, $\beta$
+reduces how much information each dimension carries rather than how many dimensions survive.
 
 \begin{table}[t]
 \caption{Test Reconstruction Quality (All-Rows Models). MSE$_0$/MSE$_1$: Safe/Failure States; AU: Active Units; $\star$: Selected}
@@ -267,32 +274,32 @@ four within five steps of failure). Columns are the 16 standardised features. Fr
 right: original, AE reconstruction ($z=z^\star$), VAE reconstruction ($\beta=\beta^\star$)
 and element-wise absolute-error maps on a common scale.}{fig:samples}
 
-Fig.~\ref{fig:samples} makes the difference visible. The AE copies every feature, including
-the binary action. The VAE keeps only the coarse pattern of each state, such as the sign of $\theta$ and
-$\dot\theta$ and whether the pole is close to its limit. It smooths away the binary action,
-the change in angular velocity and the time-to-limit estimates, which are the features with
-the largest errors in Fig.~\ref{fig:errors}a.
+Fig.~\ref{fig:samples} shows what the two models keep. Both reproduce the dominant pattern
+of each state: the sign and size of $\theta$ and $\dot\theta$ and the distance-to-limit
+features. The pre-failure rows have a strong and coherent pattern of this kind, so they are
+reconstructed well. The largest errors are on the binary action, the cart velocity and the
+change in angular velocity (Fig.~\ref{fig:errors}a). The VAE also pulls the safe states
+towards the mean, which shows as pale reconstructions in the upper rows.
 
 \figw{\textwidth}{fig-w4-error-analysis}{Error analysis on the test set. (a) MSE per feature.
 (b) Median reconstruction error versus the number of steps left before a failure, for the
 AE trained on all rows and on normal rows only. (c) Distribution of the per-state error by
 class.}{fig:errors}
 
-\textbf{Which states are hardest to reconstruct?} Errors grow as the system approaches
-failure (Fig.~\ref{fig:errors}b). The increase is steeper for the model that never saw a
-pre-failure state, which is the signal used for anomaly detection in the next subsection.
-The hardest states are not necessarily pre-failure states. The 1\% of test states with the
-largest AE error are fast-moving carts: their mean $|\dot x|$ is \aeTopXdot{}~m/s, compared
-with \allXdot{}~m/s overall. Only \aeTopAnom{} of them are pre-failure states, close to the
-\testAnomRate{} base rate. For the VAE, the hardest states are carts far from the centre:
-\vaeTopFar{} have $|x|>1.5$~m, compared with \allFar{} overall, and \vaeTopAnom{} are
-pre-failure states. In both cases the errors concentrate in sparsely populated regions of the
-state space, whether or not those regions lead to a failure. The AE trained on all rows
-reconstructs failure states almost as well as safe ones (Table~\ref{tab:recon}, MSE$_1$
-versus MSE$_0$). A flexible AE generalises to anything that
-lies on the same manifold, so a good reconstruction does not by itself make a good detector.
+\textbf{Which states are hardest to reconstruct?} The hardest states are the rare, extreme
+configurations of the system. Among the 1\% of test states with the largest AE error,
+\aeTopFar{} have the cart more than 1.5~m from the centre (\allFar{} overall), and their mean
+$|\dot x|$ is \aeTopXdot{}~m/s (\allXdot{}~m/s overall). Pre-failure states are
+over-represented among them (\aeTopAnom{} versus a \testAnomRate{} base rate), but most of
+the hardest states are safe. The same holds for the VAE (\vaeTopFar{} far from the centre,
+\vaeTopAnom{} pre-failure). Fig.~\ref{fig:errors}b shows how training data shapes this
+pattern. For the AE trained on safe states only, the median error grows from \errTenNormal{}
+ten steps before a failure to \errZeroNormal{} at the failing step. For the AE trained on all
+rows, it barely changes (\errTenAll{} to \errZeroAll), because that model has learned to
+reconstruct pre-failure states.
 
 \subsection{Anomaly Detection}
+\label{sec:anomaly}
 Table~\ref{tab:anomaly} is the cumulative comparison requested by the workshop: the
 Workshop~1 baselines, the supervised reference network and the Workshop~4 detectors on the
 same test episodes. Table~\ref{tab:sweep} reports the sweep over latent size, $\beta$ and
@@ -322,24 +329,27 @@ anomaly score by class.}{fig:anomaly}
 Four findings stand out.
 \begin{enumerate}
 \item \textbf{Training on normal rows is essential.} The same AE trained on all rows reaches
-only ROC-AUC $=\aeAllAUC$, compared with \aeAUC{} when trained on safe states only
-(Table~\ref{tab:sweep}). Once pre-failure states appear in the training data, the model
-learns to reconstruct them.
-\item \textbf{Regularisation beats reconstruction accuracy.} The VAE reconstructs worse
-than the AE but detects better: ROC-AUC \vaeAUC{} versus \aeAUC. A strongly regularised
-model can only represent the bulk of the normal data, so unusual states are pushed towards
-typical ones and leave a larger residual. The denoising AE, also regularised, falls in
-between (\daeAUC).
+only ROC-AUC $=\aeAllAUC$, compared with \aeAUC{} when trained on safe states. The selected
+VAE trained on all rows falls to \vaeAllAUC, below chance (Table~\ref{tab:sweep}). Once
+pre-failure states are in the training data, the models reconstruct them as well as anything
+else.
+\item \textbf{Regularisation beats reconstruction accuracy.} The VAE reconstructs worse than
+the AE but detects better (ROC-AUC \vaeAUC{} versus \aeAUC). Among the AEs, the
+near-perfect $z=8$ model is not the best detector either. A strongly constrained model can
+only represent the bulk of the normal data, so unusual states are pulled towards typical ones
+and leave a large residual. The denoising AE did not help in this setting (\daeAUC). A
+plausible explanation is that, with a two-unit code, the bottleneck already limits capacity,
+and the input noise mainly blurs the extreme states that signal a failure.
 \item \textbf{The KL term is informative.} Adding the KL divergence to the VAE score raises
 ROC-AUC to \vaeklAUC{} and PR-AUC to \vaeklPR. Pre-failure states are encoded far from the
 prior, so the posterior itself signals novelty, consistent with \cite{schlegl2017}.
 \item \textbf{Supervision still wins by a wide margin.} The best unsupervised detector ranks
-states well, but its PR-AUC (\vaeklPR) is far below Gradient Boosting (\gbPR) and the
-supervised MLP (\supPR). Its F1 at the validation threshold is \vaeklFone{}, versus \gbFone{}.
-The score distributions of the two classes overlap (Fig.~\ref{fig:anomaly}c): many safe
-states (e.g.\ large but recoverable angles under the random policy) look as unusual as the
-last steps before a failure. The label-free 99th-percentile threshold confirms the
-trade-off: the AE then has precision \aeQprec{} and recall \aeQrec.
+states well, but its PR-AUC (\vaeklPR) is clearly below Gradient Boosting (\gbPR) and the
+supervised MLP (\supPR). Its F1 at the validation threshold is \vaeklFone{}, compared with
+\gbFone{}. The score distributions overlap (Fig.~\ref{fig:anomaly}c), because many safe
+states, such as large but recoverable angles under the random policy, are as unusual as the
+last steps before a failure. With the label-free 99th-percentile threshold, the VAE score
+has precision \vaeklQprec{} and recall \vaeklQrec.
 \end{enumerate}
 
 \subsection{Latent Space Structure}
@@ -362,52 +372,63 @@ coloured by $|\theta|$.}{fig:tsne}
 dimension and interpretable variables (test set).}{fig:corr}
 
 \figw{0.85\textwidth}{fig-w4-beta}{Effect of $\beta$ on the VAE ($z=z^\star$, all rows).
-(a) Reconstruction MSE versus KL (rate-distortion). (b) KL per latent dimension; values close
-to zero indicate collapsed dimensions. (c) Balanced silhouette of the failure class and
-anomaly ROC-AUC of the normal-rows model.}{fig:beta}
+(a) Reconstruction MSE versus KL (rate-distortion). (b) KL per latent dimension.
+(c) Balanced silhouette of the failure class and anomaly ROC-AUC of the normal-rows model.}{fig:beta}
 
-\textbf{What do the autoencoders discover without labels?} The t-SNE maps
-(Fig.~\ref{fig:tsne}) of the input space and of the AE code are fragmented into many small
-clusters. These are trajectory segments with similar cart position and velocity, and the
-failure states form several separate islands. The colouring by $|\theta|$ shows that these
-islands are the high-angle regions of the state space. The correlation analysis
-(Fig.~\ref{fig:corr}) makes this concrete. Each AE and VAE dimension is a mixture of $x$,
-$\dot x$, $\theta$ and $\dot\theta$, and their correlation with the label is low. The
-autoencoders find the \emph{physical} structure of the system, organised by the variables
-that carry the most variance, which are not the variables that decide failure.
+\textbf{What do the autoencoders discover without labels?} In the input space, the t-SNE
+map (Fig.~\ref{fig:tsne}) is fragmented into many small clusters of similar trajectory
+segments. The failure states form several separate islands. The AE code arranges the states
+along continuous filaments ordered by $|\theta|$, and the failure states sit at the
+\emph{ends} of two of them, the most extreme configurations. The VAE map shows the same
+pattern: failure states are found at the edges of the cloud, in several groups. UMAP gives
+the same picture (Fig.~\ref{fig:umap}).
 
-The VAE map is somewhat smoother, and its balanced silhouette (\silVAE) is higher than that of the AE (\silAE) and of the input space
-(\silRaw). The $\beta$ study (Fig.~\ref{fig:beta}) explains why: increasing $\beta$ removes
-the low-variance details (fewer active units: \activeHalf, \activeOne{} and \activeFour{} for
-$\beta=0.5,1,4$) and raises both the class separability (silhouette \silbetaHalf{},
-\silbetaOne{} and \silbetaFour) and the anomaly AUC. On this dataset, the more compressed and
-disentangled code \cite{higgins2017} is also the more useful one.
+The correlation analysis (Fig.~\ref{fig:corr}) makes this concrete. Each AE and VAE dimension
+mixes the cart position, the angle and their velocities, and correlates only weakly with the
+label. The autoencoders find the \emph{physical} structure of the system, organised by the
+variables that carry the most variance. They do not single out the direction that decides
+failure. As a result, the balanced silhouette of the failure class is about the same in the
+AE code (\silAE), the VAE code (\silVAE) and the input space (\silRaw).
+
+The $\beta$ study (Fig.~\ref{fig:beta}) shows that $\beta$ acts through the amount of
+information in the code. The KL drops from \klHalf{} to \klOne{} and \klFour{} nats as
+$\beta$ increases from 0.5 to 1 and 4, while both dimensions stay active. The strongest
+regularisation ($\beta=4$) gives both the highest silhouette (\silbetaFour, compared with
+\silbetaHalf{} and \silbetaOne) and the best anomaly AUC (\aucbetaFour, compared with
+\aucbetaHalf{} and \aucbetaOne). The relation is not monotonic between $\beta=0.5$ and
+$\beta=1$, however, so with a single seed it should be read as a trend.
 
 \subsection{Supervised versus Unsupervised Representations}
-The supervised bottleneck is far more organised. Its t-SNE map is a single one-dimensional
-curve ordered by risk, with the failure states at one end (Fig.~\ref{fig:tsne}). Its
-balanced silhouette is \silSup{} (Table~\ref{tab:latent}). Almost every one of its
-dimensions correlates with the label and with $|\theta|$, and none with the cart position
-(Fig.~\ref{fig:corr}). In effect, the labels told the network which single direction of the
-state space matters and allowed it to discard everything else.
+The supervised bottleneck is far more organised. Its t-SNE map is a single curve ordered by
+risk, with the failure states gathered at one end (Fig.~\ref{fig:tsne}). Its balanced
+silhouette is \silSup{} (Table~\ref{tab:latent}). Its dimensions correlate with the label and
+with $|\theta|$, and hardly at all with the cart position (Fig.~\ref{fig:corr}). In effect,
+the labels told the network which direction of the state space matters and allowed it to
+discard the rest.
 
 The linear probes quantify the value of each representation for the downstream task. A
 logistic regression reaches ROC-AUC \probeSup{} on the supervised code, \probeRaw{} on the
-raw features (the Workshop~1 logistic baseline), \probeVAE{} on the VAE code and
-\probeAE{} on the AE code. Compression without labels therefore \emph{loses} part of the
-failure information. The reconstruction objective treats all variance as equally important,
-whereas the failure signal is concentrated in a few directions (mainly the angle and its rate
-near the limit) that carry only a small share of the total variance. The lesson about label supervision is that it is not only a training signal
-but a \emph{relevance} signal. Unsupervised models answer ``what varies?'', whereas
-supervised ones answer ``what matters?''. In this domain the two questions have different
-answers.
+raw features (the Workshop~1 logistic baseline) and \probeAE{} on the AE code. On the VAE
+code it reaches only \probeVAE{} (PR-AUC \probePRVAE), even though the same model is the best
+unsupervised detector. The two facts are consistent with the geometry seen in
+Fig.~\ref{fig:tsne}. Failure states are encoded far from the centre of the latent space but
+in different directions, so a single hyperplane cannot separate them. A distance-based score,
+such as the KL term, which grows with $\|\bm\mu\|^2$, or the reconstruction error, does
+separate them.
+
+Compression without labels therefore keeps failure information only in a form that suits
+novelty detection, not classification. The lesson about label supervision is that labels are
+not only a training signal but a \emph{relevance} signal. Unsupervised models answer ``what
+varies, and what is rare?'', whereas supervised ones answer ``what matters?''. In this domain
+the two questions have different answers.
 
 \subsection{Extensions: Denoising and Generation}
 \textbf{Denoising.} With inputs corrupted by Gaussian noise ($\sigma=\daenoise$), the
 denoising AE reconstructs the clean test states with MSE \daeNoisyMSE{}, compared with
-\aeNoisyMSE{} for the plain AE and \noiseVar{} for doing nothing. On clean inputs the price is
-small (\daeCleanMSE{} versus \aeCleanMSE). The denoising objective also improves anomaly
-detection (Table~\ref{tab:anomaly}), because it discourages the identity mapping.
+\aeNoisyMSE{} for the plain AE, at almost no cost on clean inputs (\daeCleanMSE{} versus
+\aeCleanMSE). With a two-unit code, however, the error of the bottleneck itself is much larger
+than the noise variance (\noiseVar), so neither model improves on the corrupted input as such.
+Denoising becomes meaningful only with larger codes, where the identity map is a real risk.
 
 \figw{\textwidth}{fig-w4-vae-samples}{Generative properties. Distribution of the state variables in the
 test set and in 5,000 samples decoded from $\mathbf z\sim\mathcal N(\mathbf 0,\mathbf I)$ by
@@ -415,24 +436,24 @@ the VAE and, as a contrast, by the AE (physical units). Right: consistency betwe
 generated angle and the generated $|\theta|$ feature.}{fig:gen}
 
 \textbf{Generation.} Sampling $\mathbf z\sim\mathcal N(\mathbf 0,\mathbf I)$ and decoding
-(Fig.~\ref{fig:gen}) yields states centred on the real distribution, but too concentrated
-around the upright equilibrium. The mean 1-Wasserstein distance over the four state
-variables, divided by their standard deviation, is \genWvae{} for the VAE and \genWae{} for
-the AE. The generated features are only approximately consistent with each other: the mean
-gap between the generated $|\theta|$ feature and the absolute value of the generated angle is
-\genConsVae{}~rad (\genConsAe{}~rad for the AE). Because the selected VAE is strongly regularised, it trades sample
-diversity for a smooth latent space. Using it for data augmentation would require a smaller
-$\beta$ or a decoder variance learned per feature.
+(Fig.~\ref{fig:gen}) gives VAE states that cover the range of the real data, but they are
+too concentrated around the upright equilibrium. The mean 1-Wasserstein distance over the four
+state variables, divided by their standard deviation, is \genWvae{} for the VAE and \genWae{}
+for the AE. The AE can be sampled this way only because its two-unit code happens to have a
+similar scale, which nothing in its training enforces. The generated features follow the
+physical relation $|\theta|$-feature $\approx|\theta|$ for large angles but overestimate it
+near zero (mean gap \genConsVae{}~rad). Using the VAE for data augmentation would therefore
+require a smaller $\beta$ or a decoder variance learned per feature.
 
 %% ======================================================================
 \section{Discussion and Limitations}
 \begin{itemize}
-\item \textbf{Low-dimensional tabular data.} With only 16 partly redundant inputs, an
-over-complete or even moderately sized code quickly approaches the identity map. This is
-why small latent sizes and strong regularisation work best here, unlike in image domains.
+\item \textbf{Low-dimensional tabular data.} With only 16 partly redundant inputs, even a
+moderately sized code approaches the identity map. This is why the smallest code and the
+strongest regularisation were selected here, unlike what is typical in image domains.
 \item \textbf{Single seed and selection variance.} All results come from one seed and one
-split. Several validation AUC differences in Table~\ref{tab:sweep} are a few hundredths, so
-the selected $z^\star$ and $\beta^\star$ should be read as indicative rather than definitive.
+split, and some validation differences in Table~\ref{tab:sweep} are a few hundredths. The
+selected $z^\star$ and $\beta^\star$ should be read as indicative rather than definitive.
 \item \textbf{Supervised reference.} The supervised comparison uses a re-trained MLP with
 the same trunk as the autoencoders, not the original Workshop~2 network. The conclusions
 concern supervised versus unsupervised training of the same architecture.
@@ -443,16 +464,17 @@ better.
 
 %% ======================================================================
 \section{Conclusions}
-Autoencoders learn a faithful, low-dimensional description of CartPole states, but that
-description is organised by the variables with the most variance (cart position and
-velocity), not by the proximity to failure. Trained only on safe states, the models turn
-reconstruction error into a label-free failure detector. Regularisation is the key
-ingredient: the $\beta$-VAE with the reconstruction-plus-KL score reaches ROC-AUC \vaeklAUC,
-while the more accurate AE reaches \aeAUC. Supervised models remain far better
-(PR-AUC \gbPR{} versus \vaeklPR), and the latent analysis shows why: labels select the one
-direction of the state space that matters. In practice, unsupervised models are useful for
-understanding the data and for monitoring controllers where failures have never been
-observed. When labels exist, the supervised models of Workshops~1 and~2 should be preferred.
+Autoencoders learn a compact description of CartPole states organised by the variables with
+the most variance, not by the proximity to failure. Trained only on safe states, they turn
+reconstruction error into a label-free failure detector, and the most accurate reconstructor
+is not the best detector. The $\beta$-VAE with the reconstruction-plus-KL score reaches
+ROC-AUC \vaeklAUC{}, whereas the AE reaches \aeAUC. Failure states lie at the periphery of the
+unsupervised latent spaces, which a distance-based score exploits but a linear classifier
+cannot. Supervised models remain far better (PR-AUC \gbPR{} versus \vaeklPR) because labels
+select the one direction of the state space that matters. In practice, unsupervised models are
+useful for understanding the data and for monitoring controllers where failures have never
+been observed. When labels exist, the supervised models of Workshops~1 and~2 should be
+preferred.
 
 \section*{Reproducibility}
 Code: \texttt{src/autoencoder.py} (models, losses, training loop), \texttt{src/train\_ae.py}
