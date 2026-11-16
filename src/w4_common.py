@@ -72,6 +72,7 @@ REPORT_DIR = ROOT_DIR / "report" / "workshop4"
 FIG_DIR = REPORT_DIR / "figures"
 GEN_DIR = REPORT_DIR / "generated"
 W1_RESULTS_CSV = ROOT_DIR / "runs" / "baseline_results_base.csv"
+W2_CKPT = CKPT_DIR / "w2_lstm_best.pt"  # Workshop 2 model (2-layer LSTM, window 16)
 
 PARTITIONS = ("train", "val", "test")
 
@@ -260,6 +261,35 @@ def load_w4_data() -> W4Data:
         scaler_mean=scaler.mean_.astype(np.float32),
         scaler_scale=scaler.scale_.astype(np.float32),
     )
+
+
+def w2_windows(meta: Dict, partition: str) -> tuple:
+    """Rebuild the Workshop 2 LSTM inputs for one partition, in Workshop 4 row order.
+
+    The Workshop 2 model reads, for every row, a past-only window of the last
+    ``meta["window"]`` steps of the same episode (``sequences.window_episodes``),
+    standardised with the scaler stored in its checkpoint. Rows are sorted by
+    (episode, t), exactly like :func:`load_w4_data`, so the outputs align row
+    by row with the autoencoder inputs.
+
+    Args:
+        meta (Dict): Workshop 2 checkpoint metadata (``window``, ``features``,
+            ``scaler_mean``, ``scaler_scale``).
+        partition (str): ``"train"``, ``"val"`` or ``"test"``.
+
+    Returns:
+        tuple: ``(X, lengths, episode, t)`` with ``X`` of shape (n, window, F).
+    """
+    from sequences import compute_features, window_episodes
+
+    df = load_raw()
+    part = subset(df, get_or_create_splits(df)[partition])
+    feats = compute_features(part, str(meta["features"])).to_numpy(dtype=np.float64)
+    mean = np.asarray(meta["scaler_mean"], dtype=np.float64)
+    scale = np.asarray(meta["scaler_scale"], dtype=np.float64)
+    scaled = ((feats - mean) / scale).astype(np.float32)
+    X, lengths = window_episodes(scaled, part[EPISODE_COL].to_numpy(), int(meta["window"]))
+    return X, lengths, part[EPISODE_COL].to_numpy(), part[TIME_COL].to_numpy()
 
 
 # --------------------------------------------------------------------------- #

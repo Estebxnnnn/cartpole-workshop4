@@ -9,8 +9,11 @@ Representations compared (all computed on the TEST episodes)
     * Input space   : the 16 standardised features (reference, no learning)
     * AE            : bottleneck code of ``checkpoints/ae_best.pt``
     * VAE           : posterior mean mu of ``checkpoints/vae_best.pt`` (not a sample)
-    * Supervised    : frozen bottleneck of the supervised reference MLP
-                      (``checkpoints/w2_reference.pt``, "Workshop 2" model)
+    * W2 LSTM       : frozen final hidden state (64-D) of the Workshop 2 deep
+                      LSTM (``checkpoints/w2_lstm_best.pt``, see ``w2_encoder.py``)
+    * MLP control   : bottleneck of a supervised MLP with the SAME trunk and
+                      input as the AE (isolates the effect of the labels from the
+                      temporal context the LSTM reads); table only
 
 Analyses
 --------
@@ -39,12 +42,14 @@ import argparse
 from typing import Dict
 
 import numpy as np
+from sklearn.decomposition import PCA
 from sklearn.linear_model import LogisticRegression
 from sklearn.manifold import TSNE
 from sklearn.metrics import average_precision_score, roc_auc_score, silhouette_score
 from sklearn.preprocessing import StandardScaler
 
 import autoencoder as ae
+from w2_encoder import w2_infer
 from w4_common import (
     CKPT_DIR,
     CKPT_RUNS_DIR,
@@ -65,8 +70,10 @@ setup_matplotlib()
 import matplotlib.pyplot as plt  # noqa: E402
 from matplotlib.colors import ListedColormap  # noqa: E402
 
-REP_ORDER = ["Input space (16-D)", "AE", "VAE", "Supervised (W2 ref.)"]
-REP_COLORS = [COLORS["raw"], COLORS["ae"], COLORS["vae"], COLORS["sup"]]
+W2_NAME = "W2 LSTM (supervised)"
+MLP_NAME = "MLP control (supervised)"
+REP_ORDER = ["Input space (16-D)", "AE", "VAE", W2_NAME, MLP_NAME]
+PLOT_ORDER = REP_ORDER[:4]  # 2-D maps: input, AE, VAE and the Workshop 2 model
 
 
 # --------------------------------------------------------------------------- #
@@ -179,18 +186,30 @@ def plot_embeddings(emb: Dict[str, np.ndarray], data: W4Data, sil: Dict, method:
 # Interpretation and beta study
 # --------------------------------------------------------------------------- #
 def plot_latent_correlation(reps: Dict, data: W4Data) -> Dict:
-    """|Pearson r| between every latent dimension and interpretable variables."""
+    """|Pearson r| between latent dimensions and interpretable variables.
+
+    The AE and VAE codes are shown dimension by dimension. The 64-D LSTM state
+    is summarised by its first two principal components (PC1, PC2), so the
+    three panels have the same size.
+    """
     raw = data.test.raw
     variables = {r"$x$": raw["x"], r"$\dot x$": raw["x_dot"], r"$\theta$": raw["theta"],
                  r"$\dot\theta$": raw["theta_dot"], r"$|\theta|$": raw["abs_theta"],
                  r"$|x|$": raw["abs_x"], "action": raw["action"], "label": data.test.y}
     V = np.column_stack([np.asarray(v, dtype=float) for v in variables.values()])
-    names = REP_ORDER[1:]
-    fig, axes = plt.subplots(1, len(names), figsize=(10, 2.6),
-                             gridspec_kw={"width_ratios": [reps[n]["test"].shape[1] for n in names]})
+    names = ["AE", "VAE", W2_NAME]
+    mats = {}
+    for name in names:
+        Z = reps[name]["test"]
+        if Z.shape[1] > 4:  # summarise wide representations by their top-2 PCs
+            Z = PCA(n_components=2, random_state=SEED).fit_transform(StandardScaler().fit_transform(Z))
+        mats[name] = Z
+    fig, axes = plt.subplots(1, len(names), figsize=(8, 2.6),
+                             gridspec_kw={"width_ratios": [mats[n].shape[1] for n in names]})
     out = {}
     for ax, name in zip(axes, names):
-        Z = reps[name]["test"]
+        Z = mats[name]
+        prefix = "PC" if reps[name]["test"].shape[1] > 4 else "z"
         C = np.zeros((V.shape[1], Z.shape[1]))
         for i in range(V.shape[1]):
             for j in range(Z.shape[1]):
@@ -202,7 +221,7 @@ def plot_latent_correlation(reps: Dict, data: W4Data) -> Dict:
                 ax.text(j, i, f"{C[i, j]:.2f}", ha="center", va="center", fontsize=5.5,
                         color="w" if C[i, j] > 0.55 else "k")
         ax.set_xticks(range(Z.shape[1]))
-        ax.set_xticklabels([f"z{j + 1}" for j in range(Z.shape[1])])
+        ax.set_xticklabels([f"{prefix}{j + 1}" for j in range(Z.shape[1])])
         ax.set_yticks(range(len(variables)))
         ax.set_yticklabels(list(variables.keys()) if name == names[0] else [])
         ax.set_title(name)
@@ -287,8 +306,10 @@ def main(use_umap: bool) -> None:
     print("WORKSHOP 4 - LATENT SPACE ANALYSIS")
     print("=" * 72)
     ckpts = {"AE": CKPT_DIR / "ae_best.pt", "VAE": CKPT_DIR / "vae_best.pt",
-             "Supervised (W2 ref.)": CKPT_DIR / "w2_reference.pt"}
+             MLP_NAME: CKPT_RUNS_DIR / f"{TrainConfig(model='sup', z_dim=sel['z_star']).name}.pt"}
     reps = representations(data, ckpts)
+    w2 = w2_infer(data)  # frozen Workshop 2 encoder
+    reps[W2_NAME] = {"train": w2["train"]["z"], "test": w2["test"]["z"]}
     y = data.test.y
 
     print("\n[1-2] Silhouette and linear probe")
@@ -306,12 +327,12 @@ def main(use_umap: bool) -> None:
     for method in (["tsne", "umap"] if use_umap else ["tsne"]):
         print(f"\n[3] {method.upper()} embeddings")
         try:
-            emb = {name: embed_2d(reps[name]["test"], method) for name in REP_ORDER}
+            emb = {name: embed_2d(reps[name]["test"], method) for name in PLOT_ORDER}
         except ImportError:
             print("  umap-learn is not installed -> UMAP skipped (pip install umap-learn)")
             continue
         sil2d = {name: float(silhouette_score(E, y)) for name, E in emb.items()}
-        for name in REP_ORDER:
+        for name in PLOT_ORDER:
             metrics[name][f"silhouette_{method}_2d"] = sil2d[name]
         plot_embeddings(emb, data, sil2d, method)
         embeddings[method] = True

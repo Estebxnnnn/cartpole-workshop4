@@ -8,7 +8,7 @@ Reads the JSON/CSV files written by ``train_ae.py``, ``evaluate_ae.py`` and
 
     results.tex        one \\newcommand per number quoted in the text
     tab-recon.tex      reconstruction quality (all AE z and VAE beta runs)
-    tab-anomaly.tex    cumulative comparison W1 / W2 / W4 (anomaly detection)
+    tab-anomaly.tex    cumulative comparison W1 / W2 (deep LSTM) / W4 (anomaly detection)
     tab-sweep.tex      anomaly ROC-AUC per latent size / beta and training regime
     tab-latent.tex     separability of the four representations
 
@@ -107,9 +107,9 @@ def main() -> None:
         "vaeklAUC": f3(tf("VAE (recon + KL)")["roc_auc"]), "vaeklPR": f3(tf("VAE (recon + KL)")["pr_auc"]),
         "vaeklFone": f3(tf("VAE (recon + KL)")["f1"]),
         "daeAUC": f3(tf("Denoising AE")["roc_auc"]), "daePR": f3(tf("Denoising AE")["pr_auc"]),
-        "supAUC": f3(tf("Supervised MLP (W2 ref.)")["roc_auc"]),
-        "supPR": f3(tf("Supervised MLP (W2 ref.)")["pr_auc"]),
-        "supFone": f3(tf("Supervised MLP (W2 ref.)")["f1"]),
+        "supAUC": f3(tf("LSTM (W2)")["roc_auc"]),
+        "supPR": f3(tf("LSTM (W2)")["pr_auc"]),
+        "supFone": f3(tf("LSTM (W2)")["f1"]),
         "gbAUC": f3(w1.loc["Gradient Boosting", "roc_auc"]), "gbPR": f3(w1.loc["Gradient Boosting", "pr_auc"]),
         "gbFone": f3(w1.loc["Gradient Boosting", "f1"]),
         "lrAUC": f3(w1.loc["Logistic Regression", "roc_auc"]), "lrPR": f3(w1.loc["Logistic Regression", "pr_auc"]),
@@ -120,13 +120,17 @@ def main() -> None:
         # Latent space
         "silRaw": f3(L["Input space (16-D)"]["silhouette"]["balanced"]),
         "silAE": f3(L["AE"]["silhouette"]["balanced"]), "silVAE": f3(L["VAE"]["silhouette"]["balanced"]),
-        "silSup": f3(L["Supervised (W2 ref.)"]["silhouette"]["balanced"]),
+        "silSup": f3(L["W2 LSTM (supervised)"]["silhouette"]["balanced"]),
         "probeRaw": f3(L["Input space (16-D)"]["probe"]["roc_auc"]),
         "probeAE": f3(L["AE"]["probe"]["roc_auc"]), "probeVAE": f3(L["VAE"]["probe"]["roc_auc"]),
-        "probeSup": f3(L["Supervised (W2 ref.)"]["probe"]["roc_auc"]),
+        "probeSup": f3(L["W2 LSTM (supervised)"]["probe"]["roc_auc"]),
         "probePRraw": f3(L["Input space (16-D)"]["probe"]["pr_auc"]),
         "probePRAE": f3(L["AE"]["probe"]["pr_auc"]), "probePRVAE": f3(L["VAE"]["probe"]["pr_auc"]),
-        "probePRSup": f3(L["Supervised (W2 ref.)"]["probe"]["pr_auc"]),
+        "probePRSup": f3(L["W2 LSTM (supervised)"]["probe"]["pr_auc"]),
+        "silMlp": f3(L["MLP control (supervised)"]["silhouette"]["balanced"]),
+        "probeMlp": f3(L["MLP control (supervised)"]["probe"]["roc_auc"]),
+        "probePRMlp": f3(L["MLP control (supervised)"]["probe"]["pr_auc"]),
+        "dimSup": str(L["W2 LSTM (supervised)"]["dim"]),
         # Denoising
         "aeNoisyMSE": f4(D["AE"]["mse_noisy_input"]), "daeNoisyMSE": f4(D["Denoising AE"]["mse_noisy_input"]),
         "aeCleanMSE": f4(D["AE"]["mse_clean_input"]), "daeCleanMSE": f4(D["Denoising AE"]["mse_clean_input"]),
@@ -192,10 +196,10 @@ def main() -> None:
         f.write("\n".join(lines) + "\n\\hline\n\\end{tabular}\n")
 
     # ---- Table: cumulative anomaly comparison ----------------------------- #
-    order = ["Logistic Regression", "Random Forest", "Gradient Boosting", "Supervised MLP (W2 ref.)",
+    order = ["Logistic Regression", "Random Forest", "Gradient Boosting", "LSTM (W2)",
              "AE", "VAE (recon)", "VAE (recon + KL)", "Denoising AE"]
     c = cum.set_index("model").loc[order].reset_index()
-    names = {"Supervised MLP (W2 ref.)": "MLP (W2 ref.)", "VAE (recon)": "VAE: recon.",
+    names = {"LSTM (W2)": "Deep LSTM", "VAE (recon)": "VAE: recon.",
              "VAE (recon + KL)": "VAE: recon.\\,+\\,KL", "Denoising AE": "Denoising AE",
              "Logistic Regression": "Logistic Reg.", "Random Forest": "Random Forest",
              "Gradient Boosting": "Gradient Boost.", "AE": "AE"}
@@ -209,7 +213,7 @@ def main() -> None:
             if not sup_mask[i] and abs(r[m] - unsup_best[m]) < 1e-12:
                 v = f"\\textbf{{{v}}}"
             cells.append(v)
-        ws = "W1" if r["workshop"] == "W1" else ("W2$^\\dagger$" if sup_mask[i] else "W4")
+        ws = r["workshop"]
         rows.append(f"{ws} & {names[r['model']]} & " + " & ".join(cells) + " \\\\")
         if i == 3:
             rows.append("\\hline")
@@ -241,9 +245,9 @@ def main() -> None:
         f.write("\n".join(rows) + "\n\\hline\n\\end{tabular}\n")
 
     # ---- Table: latent separability --------------------------------------- #
-    reps = ["Input space (16-D)", "AE", "VAE", "Supervised (W2 ref.)"]
+    reps = ["Input space (16-D)", "AE", "VAE", "W2 LSTM (supervised)", "MLP control (supervised)"]
     rnames = {"Input space (16-D)": "Input features", "AE": "AE code", "VAE": "VAE $\\mu$",
-              "Supervised (W2 ref.)": "MLP (W2 ref.)$^\\dagger$"}
+              "W2 LSTM (supervised)": "W2 LSTM state", "MLP control (supervised)": "MLP control$^\\ddagger$"}
     rows = []
     for r in reps:
         m = L[r]

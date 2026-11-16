@@ -15,7 +15,8 @@ Stage 1  AE, z_dim in {2, 4, 8}                  (both regimes)
 Stage 2  VAE, z_dim = z*, beta in {0.5, 1, 4}     (both regimes, KL annealing)
          beta* = best VALIDATION anomaly ROC-AUC (normal regime)
 Stage 3  Denoising AE, z_dim = z*, noise std 0.2   (normal regime, optional extension)
-Stage 4  Supervised reference MLP ("Workshop 2" model), bottleneck width z*
+Stage 4  Supervised MLP control (same trunk as the AE, bottleneck width z*);
+         the Workshop 2 deep LSTM itself is loaded frozen by ``w2_encoder.py``
 
 Outputs
 -------
@@ -29,7 +30,7 @@ Outputs
     checkpoints/vae_best.pt              VAE (z*, beta*, all rows)
     checkpoints/ae_normal_best.pt        AE  (z*, normal rows)  - anomaly detection
     checkpoints/vae_normal_best.pt       VAE (z*, beta*, normal rows)
-    checkpoints/w2_reference.pt          supervised reference MLP
+    checkpoints/mlp_control.pt           supervised MLP control (same trunk as the AE)
 
 Usage
 -----
@@ -212,7 +213,7 @@ def run_experiment(epochs: int) -> None:
     summaries.append(train_run(TrainConfig(model="ae", regime=REGIME_NORMAL, z_dim=z_star,
                                            noise_std=DAE_NOISE, epochs=epochs), data))
 
-    # Stage 4: supervised reference MLP ("Workshop 2" representation)
+    # Stage 4: supervised MLP control (same architecture as the encoder, with labels)
     summaries.append(train_run(TrainConfig(model="sup", regime=REGIME_ALL, z_dim=z_star,
                                            epochs=epochs), data))
 
@@ -225,7 +226,7 @@ def run_experiment(epochs: int) -> None:
                                        beta=beta_star).name,
         "dae_normal": TrainConfig(model="ae", regime=REGIME_NORMAL, z_dim=z_star,
                                   noise_std=DAE_NOISE).name,
-        "w2_reference": TrainConfig(model="sup", z_dim=z_star).name,
+        "mlp_control": TrainConfig(model="sup", z_dim=z_star).name,
     }
     for alias, run in names.items():
         if alias != "dae_normal":

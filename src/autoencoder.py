@@ -26,10 +26,10 @@ recommends for tabular data:
   during the first ``kl_warmup_epochs`` epochs to avoid posterior collapse.
 * **Denoising AE** (optional extension, Vincent et al. 2010): same AE, but the
   encoder receives ``x + noise`` and the loss compares with the clean ``x``.
-* **Supervised reference MLP** ("Workshop 2" model): same encoder trunk with a
-  bottleneck of the same width, followed by a logistic output trained with the
-  labels. Its frozen bottleneck is the *supervised* representation compared
-  against the unsupervised latent spaces.
+* **Supervised MLP control**: same encoder trunk with a bottleneck of the same
+  width, followed by a logistic output trained with the labels. It isolates the
+  effect of the labels (same input, same architecture) in the latent analysis;
+  the Workshop 2 deep LSTM is the main supervised reference (``w2_encoder.py``).
 
 Everything that touches PyTorch lives in this module; the experiment logic is
 in ``train_ae.py`` and the framework-independent utilities in ``w4_common.py``.
@@ -165,7 +165,7 @@ class VariationalAutoencoder(nn.Module):
 
 
 class SupervisedMLP(nn.Module):
-    """Supervised failure classifier used as the "Workshop 2" reference model.
+    """Supervised failure classifier used as a same-architecture control.
 
     The encoder trunk mirrors the autoencoders (16 -> 64 -> 32 -> z, ReLU) so
     that the bottleneck activations are directly comparable with the

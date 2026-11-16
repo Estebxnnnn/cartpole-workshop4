@@ -20,7 +20,7 @@ Sections
                                    runs/workshop4/cumulative_results.csv,
                                    fig-w4-anomaly.png
    (AE / VAE / DAE trained on normal rows; AUC-ROC compared with the
-   Workshop 1 baselines and the supervised reference MLP)
+   Workshop 1 baselines and the Workshop 2 deep LSTM)
 6. Denoising (optional)         -> part of reconstruction_results.json
 7. Generative properties (VAE)  -> fig-w4-vae-samples.png
 
@@ -40,6 +40,7 @@ from sklearn.metrics import precision_recall_curve, roc_auc_score, roc_curve
 
 import autoencoder as ae
 from features import THETA_LIMIT
+from w2_encoder import w2_infer
 from w4_common import (
     CKPT_DIR,
     CKPT_RUNS_DIR,
@@ -285,7 +286,10 @@ def anomaly_section(data: W4Data, sel: Dict) -> Dict:
     add("VAE (recon + KL)", TrainConfig(model="vae", regime="normal", z_dim=z, beta=b).name, "mse+kl")
     add("Denoising AE", TrainConfig(model="ae", regime="normal", z_dim=z,
                                     noise_std=sel["dae_noise"]).name)
-    add("Supervised MLP (W2 ref.)", TrainConfig(model="sup", z_dim=z).name, "proba")
+    # Workshop 2 model (frozen deep LSTM): supervised baseline of the cumulative table
+    w2 = w2_infer(data)
+    scores["LSTM (W2)"] = {"val": w2["val"]["proba"], "test": w2["test"]["proba"],
+                           "run": "w2_lstm_best", "kind": "proba"}
 
     results = {k: {**evaluate_scores(yv, s["val"], yt, s["test"]), "run": s["run"], "score": s["kind"]}
                for k, s in scores.items()}
@@ -327,7 +331,7 @@ def plot_anomaly(scores: Dict, yt: np.ndarray) -> None:
     fig, axes = plt.subplots(1, 3, figsize=(10, 2.8))
     styles = {"AE": (COLORS["ae"], "-"), "VAE (recon)": (COLORS["vae"], "-"),
               "VAE (recon + KL)": (COLORS["vae"], "--"), "Denoising AE": (COLORS["dae"], "-"),
-              "Supervised MLP (W2 ref.)": (COLORS["sup"], ":")}
+              "LSTM (W2)": (COLORS["sup"], ":")}
     for k, s in scores.items():
         c, ls = styles[k]
         fpr, tpr, _ = roc_curve(yt, s["test"])
@@ -361,7 +365,7 @@ def cumulative_table(anom: Dict) -> pd.DataFrame:
     for k, r in anom["main"].items():
         t = r["test_f1"]
         is_sup = r["score"] == "proba"
-        rows.append({"workshop": "W2 (ref.)" if is_sup else "W4", "model": k,
+        rows.append({"workshop": "W2" if is_sup else "W4", "model": k,
                      "supervision": "supervised" if is_sup else "unsupervised (normal rows)",
                      "roc_auc": t["roc_auc"], "pr_auc": t["pr_auc"], "precision": t["precision"],
                      "recall": t["recall"], "f1": t["f1"]})

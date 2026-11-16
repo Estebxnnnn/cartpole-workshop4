@@ -257,14 +257,15 @@ They can be inspected directly without retraining. The `checkpoints/` directory 
 
 ### 10.1 Goal
 
-The question for this workshop is what structure unsupervised models find in the CartPole data, and whether that structure helps the downstream task. Pre-failure states (`label = 1`) are treated as **anomalies**. Autoencoders trained only on safe states score each test state by its reconstruction error. The comparison is against the Workshop 1 baselines and a supervised reference network. Everything uses the same 16 features, scaler (fit on train) and `data/splits.json` as Workshop 1.
+The question for this workshop is what structure unsupervised models find in the CartPole data, and whether that structure helps the downstream task. Pre-failure states (`label = 1`) are treated as **anomalies**. Autoencoders trained only on safe states score each test state by its reconstruction error. The comparison is against the Workshop 1 baselines and the **frozen Workshop 2 deep LSTM**. Everything uses the same 16 features, scaler (fit on train) and `data/splits.json` as Workshop 1.
 
 | Component | Setting |
 |---|---|
 | AE | `16 → 64 → 32 → z → 32 → 64 → 16`, ReLU, linear output, MSE, z ∈ {2, 4, 8} |
 | VAE | same trunk, heads μ and log σ², reparameterisation trick, loss = SSE + β·KL, β ∈ {0.5, 1, 4}, KL annealing over 10 epochs |
 | Denoising AE | AE with Gaussian input noise σ = 0.2 (optional extension) |
-| Supervised reference ("W2") | same trunk with a z-wide bottleneck + logistic output, weighted BCE |
+| Workshop 2 model (frozen) | 2-layer LSTM (64 units) over 16-step raw windows, loaded from `checkpoints/w2_lstm_best.pt` (not retrained); its final hidden state is the supervised encoder |
+| Supervised control | MLP with the same input, trunk and z-wide bottleneck as the AE, weighted BCE (separates the effect of labels from the LSTM's temporal context) |
 | Training | Adam, lr 1e-3, batch 64, 50 epochs, seed 42, best validation epoch kept |
 | Regimes | `all` rows (reconstruction, latent analysis) and `normal` rows only (anomaly detection) |
 | Selection | z\* and β\* = best **validation** anomaly ROC-AUC; thresholds = max F1 on validation |
@@ -290,13 +291,16 @@ src/
 ├── train_ae.py          # experiment plan, logging, selection, best checkpoints
 ├── evaluate_ae.py       # reconstruction, sample panels, error analysis, anomaly detection, denoising, generation
 ├── analyze_latent.py    # latent-space analysis
+├── w2_encoder.py        # loads the frozen Workshop 2 LSTM (hidden state + probabilities)
+├── model.py, sequences.py  # Workshop 2 code needed to rebuild the LSTM and its input windows
 └── make_report_w4.py    # exports results to report/workshop4/generated/*.tex
 checkpoints/
 ├── ae_best.pt           # AE  (z*, all rows)
 ├── vae_best.pt          # VAE (z*, beta*, all rows)
 ├── ae_normal_best.pt    # AE  (z*, normal rows)  -> anomaly detection
 ├── vae_normal_best.pt   # VAE (z*, beta*, normal rows)
-├── w2_reference.pt      # supervised reference MLP
+├── w2_lstm_best.pt      # Workshop 2 deep LSTM (copy of the W2 model_best.pt)
+├── mlp_control.pt       # supervised MLP control
 └── workshop4/           # every trained run
 runs/workshop4/
 ├── <run>/history.csv    # train/val losses per epoch (+ tb/ TensorBoard logs)
@@ -304,7 +308,7 @@ runs/workshop4/
 ├── selection.json       # selected z*, beta*
 ├── training_summary.csv
 ├── reconstruction_results.json, anomaly_results.json, latent_results.json
-└── cumulative_results.csv   # W1 baselines + W2 reference + W4 models (anomaly detection)
+└── cumulative_results.csv   # W1 baselines + W2 deep LSTM + W4 models (anomaly detection)
 report/workshop4/
 ├── main.tex             # IEEE report (numbers come from generated/results.tex)
 ├── generated/           # auto-generated macros and tables

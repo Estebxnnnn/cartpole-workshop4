@@ -64,11 +64,13 @@ almost perfectly ($R^2=\aeRsqzEight$), yet the selected detectors use the smalle
 ($z=\zstar$) and the strongest regularisation ($\beta=\betastar$). The AE reaches ROC-AUC
 $=\aeAUC$. The VAE reaches \vaeAUC{} with its reconstruction error and \vaeklAUC{} when the KL
 term is added (PR-AUC $=\vaeklPR$), all without labels. Supervised models remain clearly
-superior (Gradient Boosting: ROC-AUC $=\gbAUC$, PR-AUC $=\gbPR$). The latent-space analysis
+superior (Workshop~2 LSTM: ROC-AUC $=\supAUC$, PR-AUC $=\supPR$). The latent-space analysis
 explains this gap. Unsupervised codes are organised by the dominant physical variables, and
 failure states lie at the periphery of the latent space rather than along a separable
-direction. A supervised bottleneck, in contrast, aligns with failure risk (balanced
-silhouette \silSup{} versus \silAE{} for the AE and \silVAE{} for the VAE).
+direction. The frozen Workshop~2 LSTM, in contrast, organises its hidden state around
+failure risk (balanced silhouette \silSup{} versus \silAE{} for the AE and \silVAE{} for
+the VAE), and a same-architecture control shows that the labels, not the architecture, make
+the difference.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -97,9 +99,9 @@ The contributions are:
 (i) an AE and a $\beta$-VAE adapted to tabular control data, with a latent-size sweep and a
 $\beta$ sweep;
 (ii) a reconstruction-based failure detector trained only on safe states, compared with the
-Workshop~1 baselines and a supervised neural reference;
+Workshop~1 baselines and the Workshop~2 deep LSTM;
 (iii) a latent-space analysis (t-SNE, UMAP, silhouette, linear probes and per-dimension
-correlations) contrasting unsupervised and supervised representations; and
+correlations) contrasting the unsupervised codes with the frozen Workshop~2 encoder; and
 (iv) two extensions: a denoising AE and an evaluation of the VAE as a generative model.
 
 %% ======================================================================
@@ -146,15 +148,17 @@ dimension.
 \caption{Network Architectures (ReLU Hidden Activations)}
 \label{tab:arch}
 \centering
+\resizebox{\columnwidth}{!}{%
 \begin{tabular}{ll}
 \hline
 \textbf{Block} & \textbf{Layers} \\ \hline
 AE encoder & $16 \rightarrow 64 \rightarrow 32 \rightarrow z$ \\
 VAE encoder & $16 \rightarrow 64 \rightarrow 32 \rightarrow (\bm\mu, \log\bm\sigma^2)\in\mathbb{R}^{z}\times\mathbb{R}^{z}$ \\
 Decoder (both) & $z \rightarrow 32 \rightarrow 64 \rightarrow 16$ (linear output) \\
-Supervised MLP & $16 \rightarrow 64 \rightarrow 32 \rightarrow z$ (ReLU) $\rightarrow 1$ (logit) \\
+W2 LSTM (frozen) & window $16\times5$ (raw) $\rightarrow$ LSTM ($2\times64$) $\rightarrow 32 \rightarrow 1$ \\
+MLP control & $16 \rightarrow 64 \rightarrow 32 \rightarrow z$ (ReLU) $\rightarrow 1$ (logit) \\
 \hline
-\end{tabular}
+\end{tabular}}
 \end{table}
 
 \subsection{Variational Autoencoder}
@@ -186,19 +190,28 @@ Following \cite{vincent2010}, a denoising AE with the selected latent size recei
 $\tilde{\mathbf x}=\mathbf x+\mathcal N(0,\daenoise^2\mathbf I)$ and is trained to reconstruct
 the clean $\mathbf x$. The noise acts as a regulariser against the identity mapping.
 
-\subsection{Supervised Reference Model}
-The workshop compares the unsupervised codes with the representation of the Workshop~2
-supervised network. That model is not part of the repository, so we train a reference
-supervised MLP with the same trunk and a bottleneck of the same width $z$
-(Table~\ref{tab:arch}). It uses binary cross-entropy weighted by the class ratio and the same
-data and split. Its frozen bottleneck is the \emph{supervised} representation; results from
-it are marked with $\dagger$.
+\subsection{Workshop~2 Model and Supervised Control}
+The supervised reference is the Workshop~2 network itself, loaded from its checkpoint and
+\emph{not} retrained. It is a two-layer LSTM with 64 hidden units that reads a past-only
+window of the last 16 raw steps $(x,\dot x,\theta,\dot\theta,a)$, followed by an MLP head
+(Table~\ref{tab:arch}). It uses the same episode split, so its outputs align row by row with
+the autoencoder inputs. Re-running it reproduces the Workshop~2 test results exactly. Its
+final hidden state ($\dimSup$-D) is the \emph{frozen supervised encoder} used in the
+latent-space comparison, and its probabilities give the Workshop~2 row of the cumulative
+table.
+
+The LSTM differs from the autoencoders in two ways: it is trained with labels, and it sees
+16 steps of history instead of one engineered vector. To separate these two effects, we also
+train a \emph{supervised control}: an MLP with the same input, the same trunk and the same
+bottleneck width $z$ as the AE, trained with binary cross-entropy weighted by the class ratio.
+It appears only in the latent-space table, marked with $\ddagger$.
 
 \subsection{Training and Model Selection}
 All models use Adam \cite{kingma2015} (learning rate $10^{-3}$, batch 64) for \epochs{}
 epochs with seed 42. We log train and validation losses every epoch and keep the best
 validation epoch. For the VAE, the best epoch is chosen with the target-$\beta$ objective and
-only after the warm-up. The supervised MLP keeps the epoch with the best validation PR-AUC.
+only after the warm-up. The supervised control keeps the epoch with the best validation
+PR-AUC.
 
 Selection uses validation data only. First, $z^\star$ is the latent size whose
 normal-rows AE has the highest validation anomaly ROC-AUC. Second, the VAE uses $z^\star$,
@@ -219,7 +232,8 @@ on \emph{validation}, the same rule as in Workshop~1. As a label-free alternativ
 use the 99th percentile of the validation normal scores.
 
 \textbf{Latent space.} Test states are encoded (with $\bm\mu$ for the VAE) and compared with
-the input features and the supervised bottleneck. We use four measurements:
+the input features, the frozen Workshop~2 encoder and the supervised control. We use four
+measurements:
 (a) the silhouette score \cite{rousseeuw1987} of the label partition, after z-scoring each
 dimension. It is computed on all rows and, because of the 17:1 imbalance, on ten
 class-balanced subsamples.
@@ -301,12 +315,12 @@ reconstruct pre-failure states.
 \subsection{Anomaly Detection}
 \label{sec:anomaly}
 Table~\ref{tab:anomaly} is the cumulative comparison requested by the workshop: the
-Workshop~1 baselines, the supervised reference network and the Workshop~4 detectors on the
+Workshop~1 baselines, the Workshop~2 LSTM and the Workshop~4 detectors on the
 same test episodes. Table~\ref{tab:sweep} reports the sweep over latent size, $\beta$ and
 training regime. Fig.~\ref{fig:anomaly} shows the curves.
 
 \begin{table}[t]
-\caption{Cumulative Test Results for Failure / Anomaly Detection (Threshold Selected on Validation). Bold: Best Unsupervised; $\dagger$: Supervised Reference Re-Trained in This Workshop}
+\caption{Cumulative Test Results for Failure / Anomaly Detection (Threshold Selected on Validation). Bold: Best Unsupervised}
 \label{tab:anomaly}
 \centering
 \setlength{\tabcolsep}{4pt}
@@ -323,7 +337,7 @@ training regime. Fig.~\ref{fig:anomaly} shows the curves.
 
 \figw{\textwidth}{fig-w4-anomaly}{Anomaly detection on the test set. (a) ROC and (b)
 precision-recall curves of the unsupervised detectors (trained on safe states only) and
-the supervised reference; the grey line in (b) is the prevalence. (c) Distribution of the AE
+the Workshop~2 LSTM; the grey line in (b) is the prevalence. (c) Distribution of the AE
 anomaly score by class.}{fig:anomaly}
 
 Four findings stand out.
@@ -345,8 +359,8 @@ ROC-AUC to \vaeklAUC{} and PR-AUC to \vaeklPR. Pre-failure states are encoded fa
 prior, so the posterior itself signals novelty, consistent with \cite{schlegl2017}.
 \item \textbf{Supervision still wins by a wide margin.} The best unsupervised detector ranks
 states well, but its PR-AUC (\vaeklPR) is clearly below Gradient Boosting (\gbPR) and the
-supervised MLP (\supPR). Its F1 at the validation threshold is \vaeklFone{}, compared with
-\gbFone{}. The score distributions overlap (Fig.~\ref{fig:anomaly}c), because many safe
+Workshop~2 LSTM (\supPR). Its F1 at the validation threshold is \vaeklFone{}, compared with
+\gbFone{} and \supFone. The score distributions overlap (Fig.~\ref{fig:anomaly}c), because many safe
 states, such as large but recoverable angles under the random policy, are as unusual as the
 last steps before a failure. With the label-free 99th-percentile threshold, the VAE score
 has precision \vaeklQprec{} and recall \vaeklQrec.
@@ -355,21 +369,22 @@ has precision \vaeklQprec{} and recall \vaeklQrec.
 \subsection{Latent Space Structure}
 
 \figw{\textwidth}{fig-w4-latent-tsne}{t-SNE maps of the test states in the input space, the AE code,
-the VAE posterior mean and the supervised bottleneck. Top: coloured by label. Bottom:
+the VAE posterior mean and the frozen Workshop~2 LSTM state. Top: coloured by label. Bottom:
 coloured by $|\theta|$.}{fig:tsne}
 
 \figw{\textwidth}{fig-w4-latent-umap}{UMAP maps of the same representations as Fig.~\ref{fig:tsne}.}{fig:umap}
 
 \begin{table}[t]
-\caption{Separability of the Failure Class in Each Representation (Test). Silhouette on the Full Set, on Balanced Subsamples and on the 2-D Maps; Linear Probe ROC-AUC and PR-AUC}
+\caption{Separability of the Failure Class in Each Representation (Test). Silhouette on the Full Set, on Balanced Subsamples and on the 2-D Maps; Linear Probe ROC-AUC and PR-AUC. $\ddagger$: Supervised Control (Same Input and Trunk as the AE)}
 \label{tab:latent}
 \centering
 \setlength{\tabcolsep}{3pt}
 \resizebox{\columnwidth}{!}{\input{generated/tab-latent.tex}}
 \end{table}
 
-\figw{0.92\textwidth}{fig-w4-latent-correlation}{Absolute Pearson correlation between each latent
-dimension and interpretable variables (test set).}{fig:corr}
+\figw{0.85\textwidth}{fig-w4-latent-correlation}{Absolute Pearson correlation between each latent
+dimension and interpretable variables (test set). The 64-D LSTM state is summarised by its
+first two principal components.}{fig:corr}
 
 \figw{0.85\textwidth}{fig-w4-beta}{Effect of $\beta$ on the VAE ($z=z^\star$, all rows).
 (a) Reconstruction MSE versus KL (rate-distortion). (b) KL per latent dimension.
@@ -399,16 +414,27 @@ regularisation ($\beta=4$) gives both the highest silhouette (\silbetaFour, comp
 $\beta=1$, however, so with a single seed it should be read as a trend.
 
 \subsection{Supervised versus Unsupervised Representations}
-The supervised bottleneck is far more organised. Its t-SNE map is a single curve ordered by
-risk, with the failure states gathered at one end (Fig.~\ref{fig:tsne}). Its balanced
-silhouette is \silSup{} (Table~\ref{tab:latent}). Its dimensions correlate with the label and
-with $|\theta|$, and hardly at all with the cart position (Fig.~\ref{fig:corr}). In effect,
-the labels told the network which direction of the state space matters and allowed it to
+The frozen Workshop~2 encoder is organised differently. In its t-SNE map
+(Fig.~\ref{fig:tsne}) the failure states form two compact clusters at the edge of the cloud,
+next to the high-$|\theta|$ regions. Its balanced silhouette (\silSup) is clearly higher
+than that of the AE (\silAE), the VAE (\silVAE) and the input space (\silRaw)
+(Table~\ref{tab:latent}). Its two main components correlate with the label and with
+$\theta$ and $|\theta|$, and almost not at all with $|x|$ or the action
+(Fig.~\ref{fig:corr}). The autoencoders, in contrast, devote a whole dimension to the cart
+position. In effect, the labels told the network which variables matter and allowed it to
 discard the rest.
 
+The supervised control isolates the role of the labels. With exactly the same input and
+trunk as the AE, adding supervision raises the balanced silhouette from \silAE{} to
+\silMlp. The control is even more separable than the LSTM state, because its 2-D bottleneck
+keeps little besides risk, whereas the 64-D LSTM state also stores the recent dynamics of
+the system. The gap between supervised and unsupervised representations is therefore caused
+by the training signal, not by the architecture or the temporal context.
+
 The linear probes quantify the value of each representation for the downstream task. A
-logistic regression reaches ROC-AUC \probeSup{} on the supervised code, \probeRaw{} on the
-raw features (the Workshop~1 logistic baseline) and \probeAE{} on the AE code. On the VAE
+logistic regression reaches ROC-AUC \probeSup{} on the Workshop~2 LSTM state (PR-AUC
+\probePRSup), \probeMlp{} on the supervised control, \probeRaw{} on the raw features (the
+Workshop~1 logistic baseline) and \probeAE{} on the AE code. On the VAE
 code it reaches only \probeVAE{} (PR-AUC \probePRVAE), even though the same model is the best
 unsupervised detector. The two facts are consistent with the geometry seen in
 Fig.~\ref{fig:tsne}. Failure states are encoded far from the centre of the latent space but
@@ -454,9 +480,10 @@ strongest regularisation were selected here, unlike what is typical in image dom
 \item \textbf{Single seed and selection variance.} All results come from one seed and one
 split, and some validation differences in Table~\ref{tab:sweep} are a few hundredths. The
 selected $z^\star$ and $\beta^\star$ should be read as indicative rather than definitive.
-\item \textbf{Supervised reference.} The supervised comparison uses a re-trained MLP with
-the same trunk as the autoencoders, not the original Workshop~2 network. The conclusions
-concern supervised versus unsupervised training of the same architecture.
+\item \textbf{Different inputs.} The Workshop~2 LSTM reads 16 steps of raw history,
+whereas the autoencoders read one engineered vector. The same-architecture supervised control
+shows that this difference does not explain the gap, but a sequence autoencoder would make the
+comparison fully symmetric.
 \item \textbf{Static inputs.} Each state is encoded independently. A recurrent or windowed
 autoencoder over the last few steps could capture the dynamics of an approaching failure
 better.
@@ -470,8 +497,10 @@ reconstruction error into a label-free failure detector, and the most accurate r
 is not the best detector. The $\beta$-VAE with the reconstruction-plus-KL score reaches
 ROC-AUC \vaeklAUC{}, whereas the AE reaches \aeAUC. Failure states lie at the periphery of the
 unsupervised latent spaces, which a distance-based score exploits but a linear classifier
-cannot. Supervised models remain far better (PR-AUC \gbPR{} versus \vaeklPR) because labels
-select the one direction of the state space that matters. In practice, unsupervised models are
+cannot. Supervised models remain far better (PR-AUC \supPR{} for the Workshop~2 LSTM and
+\gbPR{} for Gradient Boosting, versus \vaeklPR) because labels select the variables that
+matter. A same-architecture control confirms that the training signal, not the
+architecture, makes the difference. In practice, unsupervised models are
 useful for understanding the data and for monitoring controllers where failures have never
 been observed. When labels exist, the supervised models of Workshops~1 and~2 should be
 preferred.
@@ -480,9 +509,12 @@ preferred.
 Code: \texttt{src/autoencoder.py} (models, losses, training loop), \texttt{src/train\_ae.py}
 (experiment plan and logging), \texttt{src/evaluate\_ae.py} (reconstruction, anomaly
 detection, denoising, generation), \texttt{src/analyze\_latent.py} (latent analysis) and
-\texttt{src/make\_report\_w4.py} (tables and numbers of this report). Checkpoints are in
-\texttt{checkpoints/} (\texttt{ae\_best.pt}, \texttt{vae\_best.pt} and the normal-rows and
-reference models) and logs in \texttt{runs/workshop4/}. Seed 42; split \texttt{data/splits.json}.
+\texttt{src/make\_report\_w4.py} (tables and numbers of this report). The frozen
+Workshop~2 model is loaded by \texttt{src/w2\_encoder.py} with the Workshop~2 code
+(\texttt{src/model.py}, \texttt{src/sequences.py}). Checkpoints are in
+\texttt{checkpoints/} (\texttt{ae\_best.pt}, \texttt{vae\_best.pt}, the normal-rows
+models, the supervised control and \texttt{w2\_lstm\_best.pt}) and logs in
+\texttt{runs/workshop4/}. Seed 42; split \texttt{data/splits.json}.
 
 \begin{thebibliography}{99}
 \bibitem{barto1983} A.~G. Barto, R.~S. Sutton, and C.~W. Anderson, ``Neuronlike adaptive elements that can solve difficult learning control problems,'' \emph{IEEE Trans. Syst., Man, Cybern.}, vol.~13, no.~5, pp.~834--846, 1983.
