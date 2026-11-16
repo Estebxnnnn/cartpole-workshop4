@@ -488,8 +488,10 @@ query a failure model (random, alternating, angle rule and PD rule) and the sele
 agent, for \monStates{} visited states in total. A state is labelled pre-failure when its
 episode ends in a failure within five steps, the dataset definition. This applies to
 \monPreRate{} of the states, from \monFailedEps{} failed episodes. No model or threshold is
-tuned on these trajectories, and the alarm rates of the Workshop~1 and~2 models reproduce
-those of the Workshop~3 report.
+tuned on these trajectories. The Workshop~2 alarm rates reproduce those of the Workshop~3
+report exactly. The Workshop~1 Gradient Boosting model is re-fitted by the Workshop~3 bridge,
+and its rates differ slightly across library versions (for example, \alarmDqnWone{} of the
+DQN states here).
 
 \begin{table}[t]
 \caption{Pre-Failure Detection on the States Visited by the Workshop~3 Policies (Pooled). Caught: Failed Episodes With an Alarm in Their Last Five Steps; False al.: Alarm Rate in Episodes That Never Fail}
