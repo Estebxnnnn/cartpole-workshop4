@@ -70,7 +70,9 @@ failure states lie at the periphery of the latent space rather than along a sepa
 direction. The frozen Workshop~2 LSTM, in contrast, organises its hidden state around
 failure risk (balanced silhouette \silSup{} versus \silAE{} for the AE and \silVAE{} for
 the VAE), and a same-architecture control shows that the labels, not the architecture, make
-the difference.
+the difference. Used as a label-free monitor of the Workshop~3 controllers, the VAE detects
+pre-failure states on unseen policies (ROC-AUC $=\monVaeAUC$) and flags the DQN agent's
+unusual operating regime.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -102,7 +104,9 @@ $\beta$ sweep;
 Workshop~1 baselines and the Workshop~2 deep LSTM;
 (iii) a latent-space analysis (t-SNE, UMAP, silhouette, linear probes and per-dimension
 correlations) contrasting the unsupervised codes with the frozen Workshop~2 encoder; and
-(iv) two extensions: a denoising AE and an evaluation of the VAE as a generative model.
+(iv) three extensions: a denoising AE, an evaluation of the VAE as a generative model, and
+the use of the VAE as a label-free monitor of the Workshop~3 reinforcement-learning
+controllers.
 
 %% ======================================================================
 \section{Data and Problem Setup}
@@ -471,6 +475,57 @@ physical relation $|\theta|$-feature $\approx|\theta|$ for large angles but over
 near zero (mean gap \genConsVae{}~rad). Using the VAE for data augmentation would therefore
 require a smaller $\beta$ or a decoder variance learned per feature.
 
+\subsection{Extension: Label-Free Monitoring of the Workshop~3 Controllers}
+Workshop~3 trained a DQN agent that balances the pole and used the Workshop~1 and~2 models
+to measure how often its states look dangerous. Those detectors needed failure labels. We
+repeat the measurement with the VAE trained on safe states only (reconstruction-plus-KL
+score, threshold from the Workshop~4 validation episodes). This is the kind of monitor that
+could be deployed on a controller whose failures have never been observed.
+
+We follow the Workshop~3 test protocol: 100 held-out initial states, under nominal dynamics
+and under actuator noise (2~N). The policies are the four Workshop~3 baselines that do not
+query a failure model (random, alternating, angle rule and PD rule) and the selected DQN
+agent, for \monStates{} visited states in total. A state is labelled pre-failure when its
+episode ends in a failure within five steps, the dataset definition. This applies to
+\monPreRate{} of the states, from \monFailedEps{} failed episodes. No model or threshold is
+tuned on these trajectories, and the alarm rates of the Workshop~1 and~2 models reproduce
+those of the Workshop~3 report.
+
+\begin{table}[t]
+\caption{Pre-Failure Detection on the States Visited by the Workshop~3 Policies (Pooled). Caught: Failed Episodes With an Alarm in Their Last Five Steps; False al.: Alarm Rate in Episodes That Never Fail}
+\label{tab:w3}
+\centering
+\setlength{\tabcolsep}{4pt}
+\input{generated/tab-w3.tex}
+\end{table}
+
+\figw{\textwidth}{fig-w4-w3-monitoring}{Monitoring the Workshop~3 controllers on 100 test
+episodes per policy. (a, b) Share of visited states flagged by each detector; the black marks
+are the true share of pre-failure states. (c) ROC curves of pre-failure detection over all
+policies and both conditions.}{fig:w3}
+
+The VAE transfers to these new state distributions (Table~\ref{tab:w3}). It reaches ROC-AUC
+\monVaeAUC{} and raises an alarm in the last five steps of \monVaeCaught{} of the failed
+episodes. It is clearly less precise than the supervised detectors, however. Its PR-AUC is
+\monVaePR{}, compared with \monWonePR{} and \monWtwoPR{}, and it flags \monVaeFalse{} of the
+states in episodes that never fail, compared with \monWoneFalse{} and \monWtwoFalse.
+
+The alarm rates per policy (Fig.~\ref{fig:w3}) show what the VAE actually measures. The PD
+rule keeps the pole almost still (mean $|\theta|=\pdTheta^\circ$) and triggers almost no
+alarms (\alarmPdVae). The DQN agent fails in only \dqnFailNominal{} of 100 nominal episodes,
+yet the VAE flags \alarmDqnVae{} of its states, more than the Workshop~1 (\alarmDqnWone) and
+Workshop~2 (\alarmDqnWtwo) models. The agent balances the pole at a mean
+$|\theta|=\dqnTheta^\circ$, almost twice the \dataTheta$^\circ$ of the dataset, a regime the
+data-generating policy rarely visits. The VAE reports exactly that: this controller operates
+outside the normal data distribution. Under actuator noise, the same regime turns into
+failures in \dqnFailNoisy{} of 100 episodes, consistent with the fragility reported in
+Workshop~3.
+
+A label-free monitor therefore detects \emph{novelty}, not danger as such. This makes it a
+useful early warning that a new controller behaves unlike anything observed before, but
+labels, or the supervised models of Workshops~1 and~2, are needed to tell risky novelty
+from harmless novelty.
+
 %% ======================================================================
 \section{Discussion and Limitations}
 \begin{itemize}
@@ -502,7 +557,8 @@ cannot. Supervised models remain far better (PR-AUC \supPR{} for the Workshop~2 
 matter. A same-architecture control confirms that the training signal, not the
 architecture, makes the difference. In practice, unsupervised models are
 useful for understanding the data and for monitoring controllers where failures have never
-been observed. When labels exist, the supervised models of Workshops~1 and~2 should be
+been observed. On the Workshop~3 agents, the VAE caught \monVaeCaught{} of the failures
+without labels, but it also flagged harmless novelty. When labels exist, the supervised models of Workshops~1 and~2 should be
 preferred.
 
 \section*{Reproducibility}
@@ -511,7 +567,9 @@ Code: \texttt{src/autoencoder.py} (models, losses, training loop), \texttt{src/t
 detection, denoising, generation), \texttt{src/analyze\_latent.py} (latent analysis) and
 \texttt{src/make\_report\_w4.py} (tables and numbers of this report). The frozen
 Workshop~2 model is loaded by \texttt{src/w2\_encoder.py} with the Workshop~2 code
-(\texttt{src/model.py}, \texttt{src/sequences.py}). Checkpoints are in
+(\texttt{src/model.py}, \texttt{src/sequences.py}). The Workshop~3 monitoring is run by
+\texttt{src/monitor\_w3.py} with the Workshop~3 code in \texttt{workshop3/src} and the agent
+\texttt{checkpoints/agent\_best.pt}. Checkpoints are in
 \texttt{checkpoints/} (\texttt{ae\_best.pt}, \texttt{vae\_best.pt}, the normal-rows
 models, the supervised control and \texttt{w2\_lstm\_best.pt}) and logs in
 \texttt{runs/workshop4/}. Seed 42; split \texttt{data/splits.json}.

@@ -269,6 +269,7 @@ The question for this workshop is what structure unsupervised models find in the
 | Training | Adam, lr 1e-3, batch 64, 50 epochs, seed 42, best validation epoch kept |
 | Regimes | `all` rows (reconstruction, latent analysis) and `normal` rows only (anomaly detection) |
 | Selection | z\* and β\* = best **validation** anomaly ROC-AUC; thresholds = max F1 on validation |
+| Extension (W3) | the VAE (normal rows) monitors the Workshop 3 controllers (random, alternating, angle, PD and the DQN agent) on the 100 W3 test episodes, nominal and noisy, compared with the W1 and W2 detectors |
 
 ### 10.2 Running the pipeline
 
@@ -277,6 +278,7 @@ pip install -r requirements.txt          # adds torch, scipy, umap-learn, tensor
 python src/train_ae.py                   # 14 runs, ~5-10 min on CPU
 python src/evaluate_ae.py                # reconstruction, anomaly detection, denoising, generation
 python src/analyze_latent.py             # t-SNE / UMAP, silhouette, linear probes, beta study
+python src/monitor_w3.py                 # extension: label-free monitoring of the W3 controllers
 python src/make_report_w4.py             # numbers + tables for report/workshop4/main.tex
 ```
 
@@ -293,6 +295,7 @@ src/
 ├── analyze_latent.py    # latent-space analysis
 ├── w2_encoder.py        # loads the frozen Workshop 2 LSTM (hidden state + probabilities)
 ├── model.py, sequences.py  # Workshop 2 code needed to rebuild the LSTM and its input windows
+├── monitor_w3.py        # extension: VAE / W1 / W2 detectors on the Workshop 3 controllers
 └── make_report_w4.py    # exports results to report/workshop4/generated/*.tex
 checkpoints/
 ├── ae_best.pt           # AE  (z*, all rows)
@@ -301,6 +304,8 @@ checkpoints/
 ├── vae_normal_best.pt   # VAE (z*, beta*, normal rows)
 ├── w2_lstm_best.pt      # Workshop 2 deep LSTM (copy of the W2 model_best.pt)
 ├── mlp_control.pt       # supervised MLP control
+├── agent_best.pt        # Workshop 3 DQN agent (used by monitor_w3.py)
+├── model_best.pt        # Workshop 2 LSTM under its original name (used by the W3 bridge)
 └── workshop4/           # every trained run
 runs/workshop4/
 ├── <run>/history.csv    # train/val losses per epoch (+ tb/ TensorBoard logs)
@@ -308,7 +313,9 @@ runs/workshop4/
 ├── selection.json       # selected z*, beta*
 ├── training_summary.csv
 ├── reconstruction_results.json, anomaly_results.json, latent_results.json
-└── cumulative_results.csv   # W1 baselines + W2 deep LSTM + W4 models (anomaly detection)
+├── cumulative_results.csv   # W1 baselines + W2 deep LSTM + W4 models (anomaly detection)
+└── w3_monitoring.json       # extension: monitoring of the Workshop 3 controllers
+workshop3/                   # Workshop 3 code (environment, DQN agent, bridges), copied unchanged
 report/workshop4/
 ├── main.tex             # IEEE report (numbers come from generated/results.tex)
 ├── generated/           # auto-generated macros and tables

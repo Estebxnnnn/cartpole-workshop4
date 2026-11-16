@@ -11,3 +11,4 @@ torch>=2.1
 scipy>=1.10
 umap-learn>=0.5
 tensorboard>=2.14   # optional: TensorBoard logs in runs/workshop4/<run>/tb
+gymnasium>=1.0      # Workshop 3 environment (src/monitor_w3.py)
